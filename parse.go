@@ -5,6 +5,7 @@ import (
     "io"
     "io/ioutil"
     "os"
+    "syscall"
 )
 
 func parseRepo(repo, out string, bare bool) error {
@@ -15,8 +16,17 @@ func parseRepo(repo, out string, bare bool) error {
     err := handleMedia(repo, "/media", out, &count)
 
     if err != nil {
+        switch err.(*os.PathError).Err.(syscall.Errno) {
+        case syscall.ENOENT:
+            println("No media directory found")
+            return nil
+        case syscall.EACCES:
+            println("Permission to media directory denied")
+        }
+
         return err
     }
+
     println("Finished copying media files")
 
     return nil
@@ -30,16 +40,27 @@ func handleMedia(repo, dir, out string, count *int) error {
         return err
     }
 
+    os.MkdirAll(out + dir, 0775)
+
     offset := 0
     *count += len(files)
 
     for i, file := range files {
+
         if file.IsDir() {
+            fmt.Printf("(%d/%d) Copying: %s/\n", i + 1 + offset, *count, dir[1:] + "/" + file.Name())
+
             var oldCount = *count
             handleMedia(repo, dir + "/" + file.Name(), out, count)
             offset += *count - oldCount
+        } else {
+            fmt.Printf("(%d/%d) Copying: %s\n", i + 1 + offset, *count, dir[1:] + "/" + file.Name())
+            err = copyFileContents(repo + dir + "/" + file.Name(), out + dir + "/"+ file.Name())
         }
-        fmt.Printf("(%d/%d) Copying: %s\n", i + 1 + offset, *count, dir[1:] + "/" + file.Name())
+
+        if err != nil {
+            return err
+        }
     }
 
     return nil
