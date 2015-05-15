@@ -1,24 +1,21 @@
 package main
 
 import (
-    "log"
     "os"
     "path/filepath"
 )
 
-func init_repo(repo string) error {
+func initRepo(repo string, bare bool) error {
     println("Initializing hook for repo: '" + repo + "'")
 
-    err := init_hook(repo, "/.git/hooks/post-receive")
-
-    if err == nil {
-        return nil
+    if bare {
+        return initHook(repo, "/hooks/post-receive")
+    } else {
+        return initHook(repo, "/.git/hooks/post-receive")
     }
-
-    return init_hook(repo, "/hooks/post-receive")
 }
 
-func init_hook(repo string, hook string) error {
+func initHook(repo string, hook string) error {
 
     repo, err := filepath.Abs(repo)
 
