@@ -6,18 +6,12 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"syscall"
-	"time"
 )
 
 type Heading struct {
 	Title, Url string
-}
-
-type Article struct {
-	Title   string
-	Date    time.Time
-	Content string
 }
 
 type Website struct {
@@ -47,6 +41,27 @@ func parseRepo(repo, out string, bare bool) error {
 		progress("(%d/%d) Heading: %s -> %s", i+1, len(site.Headings), head.Title, head.Url)
 	}
 
+	fmt.Println("Processing pages:")
+	err = handlePages(repo, "", out, site)
+
+	if err != nil {
+		switch err.(type) {
+		case *os.PathError:
+			switch err.(*os.PathError).Err.(syscall.Errno) {
+			case syscall.ENOENT:
+				progress(err.Error())
+			case syscall.EACCES:
+				progress("Permission to page directory denied")
+				return err
+			default:
+				return err
+			}
+		default:
+			progress(err.Error())
+			return err
+		}
+	}
+
 	println("Copying media files into place")
 
 	var count int
@@ -56,12 +71,12 @@ func parseRepo(repo, out string, bare bool) error {
 		switch err.(*os.PathError).Err.(syscall.Errno) {
 		case syscall.ENOENT:
 			progress("No media directory found")
-			return nil
 		case syscall.EACCES:
 			progress("Permission to media directory denied")
+			return err
+		default:
+			return err
 		}
-
-		return err
 	}
 
 	return nil
@@ -69,7 +84,7 @@ func parseRepo(repo, out string, bare bool) error {
 
 func handleSiteDescription(repo, out string) (*Website, error) {
 
-	file, err := os.Open(repo + "/website.json")
+	file, err := os.Open(path.Join(repo, "website.json"))
 
 	if err != nil {
 		return nil, err
@@ -88,15 +103,58 @@ func handleSiteDescription(repo, out string) (*Website, error) {
 	return site, err
 }
 
-func handleMedia(repo, dir, out string, count *int) error {
-
-	files, err := ioutil.ReadDir(repo + dir)
+func handlePages(repo, dir, out string, site *Website) error {
+	files, err := ioutil.ReadDir(path.Join(repo, "pages", dir))
 
 	if err != nil {
 		return err
 	}
 
 	os.MkdirAll(out+dir, 0775)
+
+	for _, file := range files {
+		if file.IsDir() {
+			err = handlePages(repo, path.Join(dir, file.Name()), out, site)
+		} else if file.Name()[len(file.Name())-3:] == ".md" {
+			if dir == "" {
+				progress("Parsing page: %s", file.Name())
+			} else {
+				progress("Parsing page: %s", path.Join(dir, file.Name()))
+			}
+
+			out, err := os.Create(path.Join(out, dir, file.Name()[:len(file.Name())-3]+".html"))
+			defer out.Close()
+
+			if err != nil {
+				return nil
+			}
+
+			err = parsePage(repo, path.Join(repo, "pages", dir, file.Name()), out, site)
+
+			if err != nil && err.(ParseError).IsFatal() {
+				return err.(parseError).Err
+			} else {
+				continue
+			}
+		}
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func handleMedia(repo, dir, out string, count *int) error {
+
+	files, err := ioutil.ReadDir(path.Join(repo, dir))
+
+	if err != nil {
+		return err
+	}
+
+	os.MkdirAll(path.Join(out, dir), 0775)
 
 	offset := 0
 	*count += len(files)
@@ -105,13 +163,13 @@ func handleMedia(repo, dir, out string, count *int) error {
 
 		if file.IsDir() {
 			var oldCount = *count
-			handleMedia(repo, dir+"/"+file.Name(), out, count)
+			err = handleMedia(repo, path.Join(dir, file.Name()), out, count)
 			offset += *count - oldCount
 
-			progress("(%d/%d) Copying: %s/", i+1+offset, *count, dir[1:]+"/"+file.Name())
+			progress("(%d/%d) Copying: %s/", i+1+offset, *count, path.Join(dir[1:], file.Name()))
 		} else {
-			progress("(%d/%d) Copying: %s", i+1+offset, *count, dir[1:]+"/"+file.Name())
-			err = copyFileContents(repo+dir+"/"+file.Name(), out+dir+"/"+file.Name())
+			progress("(%d/%d) Copying: %s", i+1+offset, *count, path.Join(dir[1:], file.Name()))
+			err = copyFileContents(path.Join(repo, dir, file.Name()), path.Join(out, dir, file.Name()))
 		}
 
 		if err != nil {
