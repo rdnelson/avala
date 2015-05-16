@@ -4,10 +4,19 @@ import (
 	"github.com/russross/blackfriday"
 	"io"
 	"io/ioutil"
-	"path"
+	"path/filepath"
 	"strings"
 	"text/template"
 	"time"
+)
+
+const (
+	PageType    = iota
+	ArticleType = iota
+)
+
+const (
+	BlogDateFormat = "January 2 2006"
 )
 
 type Page struct {
@@ -17,51 +26,92 @@ type Page struct {
 }
 
 type Article struct {
-	Title     string
-	Date      time.Time
-	Content   string
-	Permalink string
+	Site         *Website
+	Title        string
+	CreatedDate  time.Time
+	ModifiedDate time.Time
+	Content      string
+	Permalink    string
+}
+
+type ArticleByDate []Article
+
+func (a ArticleByDate) Len() int           { return len(a) }
+func (a ArticleByDate) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ArticleByDate) Less(i, j int) bool { return a[i].CreatedDate.Unix() < a[j].CreatedDate.Unix() }
+
+func (a Article) RawDate() string {
+	return a.CreatedDate.Format(time.RFC3339)
+}
+
+func (a Article) FriendlyDate() string {
+	return a.CreatedDate.Format(BlogDateFormat)
+}
+
+func (a Article) RawEditedDate() string {
+	return a.ModifiedDate.Format(time.RFC3339)
+}
+
+func (a Article) FriendlyEditedDate() string {
+	return a.ModifiedDate.Format(BlogDateFormat)
 }
 
 type ParseError interface {
 	error
 	IsFatal() bool
+	Err() error
 }
 
 type parseError struct {
-	Err   error
-	Fatal bool
+	err   error
+	fatal bool
 }
 
 func (p parseError) Error() string {
-	return p.Error()
+	return p.err.Error()
 }
 
 func (p parseError) IsFatal() bool {
-	return p.Fatal
+	return p.fatal
 }
 
-func parsePage(repo, path string, out io.Writer, site *Website) ParseError {
-	return parseMarkdown(repo, path, "page.tmpl", out, site)
+func (p parseError) Err() error {
+	return p.err
 }
 
-func parseArticle(repo, path string, out io.Writer, site *Website) ParseError {
-	return parseMarkdown(repo, path, "article.tmpl", out, site)
+func parsePage(repo, path string, out io.Writer, site *Website) (Page, ParseError) {
+	page, err := parseMarkdown(repo, path, PageType, out, site)
+	return page.(Page), err
 }
 
-func parseMarkdown(repo, pagePath, contentTemplate string, out io.Writer, site *Website) ParseError {
+func parseArticle(repo, path string, out io.Writer, site *Website) (Article, ParseError) {
+	article, err := parseMarkdown(repo, path, ArticleType, out, site)
 
-	basePath := path.Join(repo, "templates")
-	t, err := template.ParseFiles(path.Join(basePath, "main.tmpl"), path.Join(basePath, contentTemplate))
+	return article.(Article), err
+}
+
+func parseMarkdown(repo, pagePath string, fileType int, out io.Writer, site *Website) (interface{}, ParseError) {
+
+	basePath := filepath.Join(repo, "templates")
+	var contentTemplate string
+
+	switch fileType {
+	case PageType:
+		contentTemplate = "page.tmpl"
+	case ArticleType:
+		contentTemplate = "article.tmpl"
+	}
+
+	t, err := template.ParseFiles(filepath.Join(basePath, "main.tmpl"), filepath.Join(basePath, contentTemplate))
 
 	if err != nil {
-		return parseError{err, true}
+		return nil, parseError{err, true}
 	}
 
 	pageContents, err := ioutil.ReadFile(pagePath)
 
 	if err != nil {
-		return parseError{err, false}
+		return nil, parseError{err, false}
 	}
 
 	lines := strings.Split(string(pageContents), "\n")
@@ -78,14 +128,26 @@ func parseMarkdown(repo, pagePath, contentTemplate string, out io.Writer, site *
 
 	body := string(blackfriday.MarkdownCommon(content))
 
-	page := Page{site, title, body}
+	var dataObj interface{}
 
-	err = t.Execute(out, page)
+	switch fileType {
+	case PageType:
+		dataObj = Page{site, title, body}
+
+	case ArticleType:
+		created := getCreatedDate(pagePath)
+		modified := getModifiedDate(pagePath)
+		permalink := getPermalink(pagePath)
+
+		dataObj = Article{site, title, created, modified, body, permalink}
+	}
+
+	err = t.Execute(out, dataObj)
 
 	if err != nil {
 		println(err.Error())
-		return parseError{err, false}
+		return nil, parseError{err, false}
 	}
 
-	return nil
+	return dataObj, nil
 }

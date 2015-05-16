@@ -6,7 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"syscall"
 )
 
@@ -42,49 +42,35 @@ func parseRepo(repo, out string, bare bool) error {
 	}
 
 	fmt.Println("Processing pages:")
-	err = handlePages(repo, "", out, site)
+	err = handlePages(repo, out, site)
 
 	if err != nil {
-		switch err.(type) {
-		case *os.PathError:
-			switch err.(*os.PathError).Err.(syscall.Errno) {
-			case syscall.ENOENT:
-				progress(err.Error())
-			case syscall.EACCES:
-				progress("Permission to page directory denied")
-				return err
-			default:
-				return err
-			}
-		default:
-			progress(err.Error())
-			return err
-		}
+		return err
+	}
+
+	fmt.Println("Processing articles:")
+	err = handleArticles(repo, out, site)
+
+	if err != nil {
+		return err
 	}
 
 	println("Copying media files into place")
 
-	var count int
-	err = handleMedia(repo, "/media", out, &count)
+	err = handleMedia(repo, out)
 
 	if err != nil {
-		switch err.(*os.PathError).Err.(syscall.Errno) {
-		case syscall.ENOENT:
-			progress("No media directory found")
-		case syscall.EACCES:
-			progress("Permission to media directory denied")
-			return err
-		default:
-			return err
-		}
+		return err
 	}
+
+	fmt.Printf("Processed %d articles successfully.\n", len(site.Articles))
 
 	return nil
 }
 
 func handleSiteDescription(repo, out string) (*Website, error) {
 
-	file, err := os.Open(path.Join(repo, "website.json"))
+	file, err := os.Open(filepath.Join(repo, "website.json"))
 
 	if err != nil {
 		return nil, err
@@ -103,8 +89,40 @@ func handleSiteDescription(repo, out string) (*Website, error) {
 	return site, err
 }
 
-func handlePages(repo, dir, out string, site *Website) error {
-	files, err := ioutil.ReadDir(path.Join(repo, "pages", dir))
+func handlePages(repo, out string, site *Website) error {
+
+	err := handlePagePath(repo, "", out, site)
+
+	if err != nil {
+		switch err.(type) {
+		case *os.PathError:
+			switch err.(*os.PathError).Err.(syscall.Errno) {
+			case syscall.ENOENT:
+				progress("No pages directory found")
+			case syscall.EACCES:
+				progress("Permission to pages directory denied")
+				return err
+			default:
+				return err
+			}
+		case ParseError:
+			if err.(ParseError).IsFatal() {
+				return err.(ParseError).Err()
+			} else {
+				progress(err.Error())
+				return nil
+			}
+		default:
+			progress(err.Error())
+			return err
+		}
+	}
+
+	return nil
+}
+
+func handlePagePath(repo, dir, out string, site *Website) error {
+	files, err := ioutil.ReadDir(filepath.Join(repo, "pages", dir))
 
 	if err != nil {
 		return err
@@ -114,25 +132,25 @@ func handlePages(repo, dir, out string, site *Website) error {
 
 	for _, file := range files {
 		if file.IsDir() {
-			err = handlePages(repo, path.Join(dir, file.Name()), out, site)
+			err = handlePagePath(repo, filepath.Join(dir, file.Name()), out, site)
 		} else if file.Name()[len(file.Name())-3:] == ".md" {
 			if dir == "" {
 				progress("Parsing page: %s", file.Name())
 			} else {
-				progress("Parsing page: %s", path.Join(dir, file.Name()))
+				progress("Parsing page: %s", filepath.Join(dir, file.Name()))
 			}
 
-			out, err := os.Create(path.Join(out, dir, file.Name()[:len(file.Name())-3]+".html"))
+			out, err := os.Create(filepath.Join(out, dir, file.Name()[:len(file.Name())-3]+".html"))
 			defer out.Close()
 
 			if err != nil {
 				return nil
 			}
 
-			err = parsePage(repo, path.Join(repo, "pages", dir, file.Name()), out, site)
+			_, err = parsePage(repo, filepath.Join(repo, "pages", dir, file.Name()), out, site)
 
 			if err != nil && err.(ParseError).IsFatal() {
-				return err.(parseError).Err
+				return err.(ParseError).Err()
 			} else {
 				continue
 			}
@@ -146,30 +164,87 @@ func handlePages(repo, dir, out string, site *Website) error {
 	return nil
 }
 
-func handleMedia(repo, dir, out string, count *int) error {
+func handleArticles(repo, out string, site *Website) error {
 
-	files, err := ioutil.ReadDir(path.Join(repo, dir))
+	err := handleArticlePath(repo, "", out, site)
+
+	if err != nil {
+		switch err.(type) {
+		case *os.PathError:
+			switch err.(*os.PathError).Err.(syscall.Errno) {
+			case syscall.ENOENT:
+				progress("No article directory found")
+			case syscall.EACCES:
+				progress("Permission to article directory denied")
+				return err
+			default:
+				return err
+			}
+		case ParseError:
+			if err.(ParseError).IsFatal() {
+				return err.(ParseError).Err()
+			} else {
+				progress(err.Error())
+				return nil
+			}
+		default:
+			progress(err.Error())
+			return err
+		}
+	}
+
+	return nil
+}
+
+func handleArticlePath(repo, dir, out string, site *Website) error {
+	files, err := ioutil.ReadDir(filepath.Join(repo, "articles", dir))
 
 	if err != nil {
 		return err
 	}
 
-	os.MkdirAll(path.Join(out, dir), 0775)
+	os.MkdirAll(out+dir, 0775)
 
-	offset := 0
-	*count += len(files)
-
-	for i, file := range files {
-
+	for _, file := range files {
 		if file.IsDir() {
-			var oldCount = *count
-			err = handleMedia(repo, path.Join(dir, file.Name()), out, count)
-			offset += *count - oldCount
+			err = handleArticlePath(repo, filepath.Join(dir, file.Name()), out, site)
+		} else if file.Name()[len(file.Name())-3:] == ".md" {
 
-			progress("(%d/%d) Copying: %s/", i+1+offset, *count, path.Join(dir[1:], file.Name()))
-		} else {
-			progress("(%d/%d) Copying: %s", i+1+offset, *count, path.Join(dir[1:], file.Name()))
-			err = copyFileContents(path.Join(repo, dir, file.Name()), path.Join(out, dir, file.Name()))
+			filePath := filepath.Join(repo, "articles", dir, file.Name())
+
+			if getCreatedDate(filePath).Unix() == 0 {
+				continue
+			}
+
+			outPath := filepath.Join(out, filepath.FromSlash(getPermalink(filePath)+".html"))
+
+			if dir == "" {
+				progress("Parsing article: %s -> %s", file.Name(), outPath)
+			} else {
+				progress("Parsing article: %s -> %s", filepath.Join(dir, file.Name()), outPath)
+			}
+
+			os.MkdirAll(filepath.Dir(outPath), 0775)
+
+			out, err := os.Create(outPath)
+			defer out.Close()
+
+			if err != nil {
+				return nil
+			}
+
+			article, err := parseArticle(repo, filePath, out, site)
+
+			if err != nil {
+				if err.(ParseError).IsFatal() {
+					return err.(ParseError).Err()
+				} else {
+					progress(err.Error())
+					continue
+				}
+			}
+
+			site.Articles = append(site.Articles, article)
 		}
 
 		if err != nil {
@@ -178,6 +253,71 @@ func handleMedia(repo, dir, out string, count *int) error {
 	}
 
 	return nil
+}
+
+func handleMedia(repo, out string) error {
+
+	var count int
+	err := handleMediaPath(repo, "/media", out, &count)
+
+	if err != nil {
+		switch err.(type) {
+		case *os.PathError:
+			switch err.(*os.PathError).Err.(syscall.Errno) {
+			case syscall.ENOENT:
+				progress("No media directory found")
+			case syscall.EACCES:
+				progress("Permission to media directory denied")
+				return err
+			default:
+				progress(err.Error())
+				return err
+			}
+		default:
+			progress(err.Error())
+			return err
+		}
+	}
+
+	return nil
+}
+
+func handleMediaPath(repo, dir, out string, count *int) error {
+
+	files, err := ioutil.ReadDir(filepath.Join(repo, dir))
+
+	if err != nil {
+		return err
+	}
+
+	os.MkdirAll(filepath.Join(out, dir), 0775)
+
+	offset := 0
+	*count += len(files)
+
+	for i, file := range files {
+
+		if file.IsDir() {
+			var oldCount = *count
+			err = handleMediaPath(repo, filepath.Join(dir, file.Name()), out, count)
+			offset += *count - oldCount
+
+			progress("(%d/%d) Copying: %s/", i+1+offset, *count, filepath.Join(dir[1:], file.Name()))
+		} else {
+			progress("(%d/%d) Copying: %s", i+1+offset, *count, filepath.Join(dir[1:], file.Name()))
+			err = copyFileContents(filepath.Join(repo, dir, file.Name()), filepath.Join(out, dir, file.Name()))
+		}
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func createIndices(site *Website) {
+	// TODO: Populate
 }
 
 func copyFileContents(src, dst string) (err error) {
@@ -210,4 +350,13 @@ func copyFileContents(src, dst string) (err error) {
 	err = out.Sync()
 
 	return
+}
+
+func getPermalink(path string) string {
+	created := getCreatedDate(path)
+
+	file := filepath.Base(path)
+	file = file[:len(file)-len(filepath.Ext(file))]
+
+	return fmt.Sprintf("/%d/%d/%d/%s", created.Year(), created.Month(), created.Day(), file)
 }
