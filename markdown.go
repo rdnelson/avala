@@ -34,6 +34,16 @@ type Article struct {
 	Permalink    string
 }
 
+type TemplateError interface {
+	error
+}
+
+type templateError struct {
+	err error
+}
+
+func (a templateError) Error() string { return a.err.Error() }
+
 type ArticleByDate []Article
 
 func (a ArticleByDate) Len() int           { return len(a) }
@@ -79,18 +89,25 @@ func (p parseError) Err() error {
 	return p.err
 }
 
-func parsePage(repo, path string, out io.Writer, site *Website) (Page, ParseError) {
+func parsePage(repo, path string, out io.Writer, site *Website) (*Page, error) {
 	page, err := parseMarkdown(repo, path, PageType, out, site)
-	return page.(Page), err
+	if page == nil {
+		return nil, err
+	}
+
+	return page.(*Page), err
 }
 
-func parseArticle(repo, path string, out io.Writer, site *Website) (Article, ParseError) {
+func parseArticle(repo, path string, out io.Writer, site *Website) (*Article, error) {
 	article, err := parseMarkdown(repo, path, ArticleType, out, site)
+	if article == nil {
+		return nil, err
+	}
 
-	return article.(Article), err
+	return article.(*Article), err
 }
 
-func parseMarkdown(repo, pagePath string, fileType int, out io.Writer, site *Website) (interface{}, ParseError) {
+func parseMarkdown(repo, pagePath string, fileType int, out io.Writer, site *Website) (interface{}, error) {
 
 	basePath := filepath.Join(repo, "templates")
 	var contentTemplate string
@@ -105,7 +122,7 @@ func parseMarkdown(repo, pagePath string, fileType int, out io.Writer, site *Web
 	t, err := template.ParseFiles(filepath.Join(basePath, "main.tmpl"), filepath.Join(basePath, contentTemplate))
 
 	if err != nil {
-		return nil, parseError{err, true}
+		return nil, templateError{err}
 	}
 
 	pageContents, err := ioutil.ReadFile(pagePath)
@@ -132,17 +149,17 @@ func parseMarkdown(repo, pagePath string, fileType int, out io.Writer, site *Web
 
 	switch fileType {
 	case PageType:
-		dataObj = Page{site, title, body}
+		dataObj = &Page{site, title, body}
+		err = t.Execute(out, dataObj.(*Page))
 
 	case ArticleType:
 		created := getCreatedDate(pagePath)
 		modified := getModifiedDate(pagePath)
 		permalink := getPermalink(pagePath)
 
-		dataObj = Article{site, title, created, modified, body, permalink}
+		dataObj = &Article{site, title, created, modified, body, permalink}
+		err = t.Execute(out, dataObj.(*Article))
 	}
-
-	err = t.Execute(out, dataObj)
 
 	if err != nil {
 		println(err.Error())

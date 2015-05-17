@@ -17,7 +17,7 @@ type Heading struct {
 type Website struct {
 	PageTitle, Title, Subtitle string
 	Headings                   []Heading
-	Articles                   []Article
+	Articles                   []*Article
 }
 
 func progress(format string, a ...interface{}) {
@@ -98,13 +98,16 @@ func handlePages(repo, out string, site *Website) error {
 		case *os.PathError:
 			switch err.(*os.PathError).Err.(syscall.Errno) {
 			case syscall.ENOENT:
-				progress("No pages directory found")
+				progress("Page directory not found")
 			case syscall.EACCES:
 				progress("Permission to pages directory denied")
 				return err
 			default:
 				return err
 			}
+		case TemplateError:
+			progress("Required template missing: %s", err.Error())
+			return err
 		case ParseError:
 			if err.(ParseError).IsFatal() {
 				return err.(ParseError).Err()
@@ -149,10 +152,15 @@ func handlePagePath(repo, dir, out string, site *Website) error {
 
 			_, err = parsePage(repo, filepath.Join(repo, "pages", dir, file.Name()), out, site)
 
-			if err != nil && err.(ParseError).IsFatal() {
-				return err.(ParseError).Err()
-			} else {
-				continue
+			switch err.(type) {
+			case ParseError:
+				if err != nil && err.(ParseError).IsFatal() {
+					return err.(ParseError).Err()
+				} else {
+					continue
+				}
+			case TemplateError:
+				return err
 			}
 		}
 
@@ -173,6 +181,7 @@ func handleArticles(repo, out string, site *Website) error {
 		case *os.PathError:
 			switch err.(*os.PathError).Err.(syscall.Errno) {
 			case syscall.ENOENT:
+				progress(err.Error())
 				progress("No article directory found")
 			case syscall.EACCES:
 				progress("Permission to article directory denied")
@@ -180,6 +189,9 @@ func handleArticles(repo, out string, site *Website) error {
 			default:
 				return err
 			}
+		case TemplateError:
+			progress("Template missing: %s", err.Error())
+			return err
 		case ParseError:
 			if err.(ParseError).IsFatal() {
 				return err.(ParseError).Err()
