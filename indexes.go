@@ -52,20 +52,20 @@ func createIndices(site *Website, out string) (err error) {
 
 	first, last := 0, 0
 
-	progress("Creating index for %s %d", site.Articles[first].CreatedDate.Month().String(), site.Articles[first].CreatedDate.Year())
+	name = fmt.Sprintf("%s %d", site.Articles[first].CreatedDate.Month().String(), site.Articles[first].CreatedDate.Year())
+	progress("Creating index for %s", name)
 	for i, article := range site.Articles {
-		name = fmt.Sprintf("%s %d", site.Articles[first].CreatedDate.Month().String(), site.Articles[first].CreatedDate.Year())
 		if SameMonth(article.CreatedDate, site.Articles[first].CreatedDate) {
 			last = i
 			finalUpdateRequired = true
 		} else {
 			site.Indices = append(site.Indices, IndexRange{first, last, name})
 			first = i
+			name = fmt.Sprintf("%s %d", site.Articles[first].CreatedDate.Month().String(), site.Articles[first].CreatedDate.Year())
 			progress("Creating index for %s", name)
 			finalUpdateRequired = false
 		}
 	}
-	progress("%d -> %d", first, last)
 
 	if finalUpdateRequired {
 		site.Indices = append(site.Indices, IndexRange{first, len(site.Articles) - 1, name})

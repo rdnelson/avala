@@ -32,6 +32,7 @@ type Website struct {
 	CurrentIndex               *IndexRange
 	Indices                    []IndexRange
 	RepoPath                   string
+	Media                      []string
 }
 
 func (a *Website) ActiveArticles() []*Article {
@@ -63,21 +64,20 @@ func parseRepo(repo, out string, bare bool) error {
 		progress("(%d/%d) Heading: %s -> %s", i+1, len(site.Headings), head.Title, head.Url)
 	}
 
-	fmt.Println("Processing pages:")
+	fmt.Println("Processing pages")
 	err = handlePages(site, out)
 
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Processing articles:")
+	fmt.Println("Processing articles")
 	err = handleArticles(site, out)
 
 	if err != nil {
 		return err
 	}
 
-	println("Sorting articles")
 	// Sort the articles to newest first
 	sort.Sort(sort.Reverse(ArticleByDate(site.Articles)))
 
@@ -88,6 +88,7 @@ func parseRepo(repo, out string, bare bool) error {
 		progress(err.Error())
 		return err
 	}
+	progress("Successfully generated homepage")
 
 	println("Creating archive index pages")
 	err = createIndices(site, out)
@@ -99,13 +100,17 @@ func parseRepo(repo, out string, bare bool) error {
 
 	println("Copying media files into place")
 
-	err = handleMedia(site, out)
+	if len(site.Media) == 0 {
+		progress("No media directories")
+	} else {
+		err = handleMedia(site, out)
 
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
-	return err
+	return nil
 }
 
 func handleSiteDescription(repo, out string) (*Website, error) {
