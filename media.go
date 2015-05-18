@@ -8,16 +8,15 @@ import (
 
 func handleMedia(site *Website, out string) error {
 
-	dirs := []string{"media", "scripts"}
-
 	var count int
+	offset := 0
 
-	for _, dir := range dirs {
+	for _, dir := range site.Media {
 		if _, err := os.Stat(filepath.Join(site.RepoPath, dir)); err != nil {
 			continue
 		}
 
-		err := handleMediaPath(site, dir, out, &count)
+		err := handleMediaPath(site, dir, out, &count, &offset)
 
 		if err != nil {
 			switch {
@@ -32,7 +31,7 @@ func handleMedia(site *Website, out string) error {
 	return nil
 }
 
-func handleMediaPath(site *Website, dir, out string, count *int) error {
+func handleMediaPath(site *Website, dir, out string, count *int, offset *int) error {
 
 	files, err := ioutil.ReadDir(filepath.Join(site.RepoPath, dir))
 
@@ -42,19 +41,18 @@ func handleMediaPath(site *Website, dir, out string, count *int) error {
 
 	os.MkdirAll(filepath.Join(out, dir), 0775)
 
-	offset := 0
 	*count += len(files)
 
 	for i, file := range files {
 
 		if file.IsDir() {
 			var oldCount = *count
-			err = handleMediaPath(site, filepath.Join(dir, file.Name()), out, count)
-			offset += *count - oldCount
+			err = handleMediaPath(site, filepath.Join(dir, file.Name()), out, count, offset)
+			*offset += *count - oldCount
 
-			progress("(%d/%d) Copying: %s/", i+1+offset, *count, filepath.Join(dir[1:], file.Name()))
+			progress("(%d/%d) Copying: %s/", i+1+*offset, *count, filepath.Join(dir[1:], file.Name()))
 		} else {
-			progress("(%d/%d) Copying: %s", i+1+offset, *count, filepath.Join(dir[1:], file.Name()))
+			progress("(%d/%d) Copying: %s", i+1+*offset, *count, filepath.Join(dir[1:], file.Name()))
 			err = copyFileContents(filepath.Join(site.RepoPath, dir, file.Name()), filepath.Join(out, dir, file.Name()))
 		}
 
@@ -62,6 +60,8 @@ func handleMediaPath(site *Website, dir, out string, count *int) error {
 			return err
 		}
 	}
+
+	*offset += *count
 
 	return nil
 }
