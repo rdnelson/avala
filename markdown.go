@@ -1,70 +1,27 @@
 package main
 
 import (
+	"errors"
 	"github.com/russross/blackfriday"
 	"io"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"text/template"
-	"time"
 )
 
 const (
-	PageType    = iota
-	ArticleType = iota
+	PageType        = iota
+	ArticleType     = iota
+	TemplateDir     = "templates"
+	DefaultTemplate = "main.tmpl"
 )
-
-const (
-	BlogDateFormat = "January 2 2006"
-)
-
-type Page struct {
-	Site    *Website
-	Title   string
-	Content string
-}
-
-type Article struct {
-	Site         *Website
-	Title        string
-	CreatedDate  time.Time
-	ModifiedDate time.Time
-	Content      string
-	Permalink    string
-}
 
 type TemplateError interface {
 	error
 }
 
-type templateError struct {
-	err error
-}
-
-func (a templateError) Error() string { return a.err.Error() }
-
-type ArticleByDate []Article
-
-func (a ArticleByDate) Len() int           { return len(a) }
-func (a ArticleByDate) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ArticleByDate) Less(i, j int) bool { return a[i].CreatedDate.Unix() < a[j].CreatedDate.Unix() }
-
-func (a Article) RawDate() string {
-	return a.CreatedDate.Format(time.RFC3339)
-}
-
-func (a Article) FriendlyDate() string {
-	return a.CreatedDate.Format(BlogDateFormat)
-}
-
-func (a Article) RawEditedDate() string {
-	return a.ModifiedDate.Format(time.RFC3339)
-}
-
-func (a Article) FriendlyEditedDate() string {
-	return a.ModifiedDate.Format(BlogDateFormat)
-}
+type templateError error
 
 type ParseError interface {
 	error
@@ -89,27 +46,40 @@ func (p parseError) Err() error {
 	return p.err
 }
 
-func parsePage(repo, path string, out io.Writer, site *Website) (*Page, error) {
-	page, err := parseMarkdown(repo, path, PageType, out, site)
-	if page == nil {
-		return nil, err
-	}
-
-	return page.(*Page), err
+func parsePage(site *Website, path string, out io.Writer) error {
+	return parseMarkdown(site, path, PageType, out)
 }
 
-func parseArticle(repo, path string, out io.Writer, site *Website) (*Article, error) {
-	article, err := parseMarkdown(repo, path, ArticleType, out, site)
-	if article == nil {
-		return nil, err
-	}
-
-	return article.(*Article), err
+func parseArticle(site *Website, path string, out io.Writer) error {
+	return parseMarkdown(site, path, ArticleType, out)
 }
 
-func parseMarkdown(repo, pagePath string, fileType int, out io.Writer, site *Website) (interface{}, error) {
+func getTemplate(site *Website, names ...string) (t *template.Template, err error) {
 
-	basePath := filepath.Join(repo, "templates")
+	if len(names) == 0 {
+		return nil, errors.New("At least one template must be specified")
+	}
+
+	t, err = template.ParseFiles(filepath.Join(site.RepoPath, TemplateDir, DefaultTemplate))
+
+	if err != nil {
+		return
+	}
+
+	for _, name := range names {
+		t, err = t.ParseFiles(filepath.Join(site.RepoPath, TemplateDir, name))
+
+		if err != nil {
+			err = templateError(err)
+			return
+		}
+	}
+
+	return
+}
+
+func parseMarkdown(site *Website, pagePath string, fileType int, out io.Writer) error {
+
 	var contentTemplate string
 
 	switch fileType {
@@ -119,16 +89,16 @@ func parseMarkdown(repo, pagePath string, fileType int, out io.Writer, site *Web
 		contentTemplate = "article.tmpl"
 	}
 
-	t, err := template.ParseFiles(filepath.Join(basePath, "main.tmpl"), filepath.Join(basePath, contentTemplate))
+	t, err := getTemplate(site, contentTemplate)
 
 	if err != nil {
-		return nil, templateError{err}
+		return templateError(err)
 	}
 
 	pageContents, err := ioutil.ReadFile(pagePath)
 
 	if err != nil {
-		return nil, parseError{err, false}
+		return parseError{err, false}
 	}
 
 	lines := strings.Split(string(pageContents), "\n")
@@ -145,26 +115,27 @@ func parseMarkdown(repo, pagePath string, fileType int, out io.Writer, site *Web
 
 	body := string(blackfriday.MarkdownCommon(content))
 
-	var dataObj interface{}
-
 	switch fileType {
 	case PageType:
-		dataObj = &Page{site, title, body}
-		err = t.Execute(out, dataObj.(*Page))
-
+		dataObj := &Page{site, title, body}
+		site.Pages = append(site.Pages, dataObj)
+		site.CurrentPage = dataObj
 	case ArticleType:
 		created := getCreatedDate(pagePath)
 		modified := getModifiedDate(pagePath)
 		permalink := getPermalink(pagePath)
 
-		dataObj = &Article{site, title, created, modified, body, permalink}
-		err = t.Execute(out, dataObj.(*Article))
+		dataObj := &Article{title, created, modified, body, permalink}
+		site.Articles = append(site.Articles, dataObj)
+		site.CurrentArticle = dataObj
 	}
+
+	err = t.Execute(out, site)
 
 	if err != nil {
 		println(err.Error())
-		return nil, parseError{err, false}
+		return parseError{err, false}
 	}
 
-	return dataObj, nil
+	return nil
 }
