@@ -50,9 +50,9 @@ func handleMediaPath(site *Website, dir, out string, count *int, offset *int) er
 			err = handleMediaPath(site, filepath.Join(dir, file.Name()), out, count, offset)
 			*offset += *count - oldCount
 
-			progress("(%d/%d) Copying: %s/", i+1+*offset, *count, filepath.Join(dir[1:], file.Name()))
+			progress("(%d/%d) Copying: %s/", i+1+*offset, *count, filepath.Join(dir, file.Name()))
 		} else {
-			progress("(%d/%d) Copying: %s", i+1+*offset, *count, filepath.Join(dir[1:], file.Name()))
+			progress("(%d/%d) Copying: %s", i+1+*offset, *count, filepath.Join(dir, file.Name()))
 			err = copyFileContents(filepath.Join(site.RepoPath, dir, file.Name()), filepath.Join(out, dir, file.Name()))
 		}
 
