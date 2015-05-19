@@ -20,22 +20,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	if out == "" {
+		println("No output path specified")
+		os.Exit(2)
+	}
+
 	bare, err := isBareRepo(flag.Arg(0))
 
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error: %s\n", err.Error())
 	}
 
 	// Initialize the post-commit hook
 	if *init {
-		initRepo(flag.Arg(0), bare)
+		initRepo(flag.Arg(0), out, bare)
 		return
 	}
 
-	if out != "" {
-		parseRepo(flag.Arg(0), out, bare)
-	} else {
-		println("No output path specified")
-		os.Exit(2)
-	}
+	parseRepo(flag.Arg(0), out, bare)
 }
