@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -52,16 +51,16 @@ func createIndices(site *Website, out string) (err error) {
 
 	first, last := 0, 0
 
-	name = fmt.Sprintf("%s %d", site.Articles[first].CreatedDate.Month().String(), site.Articles[first].CreatedDate.Year())
+	name = fmt.Sprintf("%s %d", site.Articles[first].createdDate.Month().String(), site.Articles[first].createdDate.Year())
 	progress("Creating index for %s", name)
 	for i, article := range site.Articles {
-		if SameMonth(article.CreatedDate, site.Articles[first].CreatedDate) {
+		if SameMonth(article.createdDate, site.Articles[first].createdDate) {
 			last = i
 			finalUpdateRequired = true
 		} else {
 			site.Indices = append(site.Indices, IndexRange{first, last, name})
 			first = i
-			name = fmt.Sprintf("%s %d", site.Articles[first].CreatedDate.Month().String(), site.Articles[first].CreatedDate.Year())
+			name = fmt.Sprintf("%s %d", site.Articles[first].createdDate.Month().String(), site.Articles[first].createdDate.Year())
 			progress("Creating index for %s", name)
 			finalUpdateRequired = false
 		}
@@ -80,12 +79,6 @@ func createIndexPages(site *Website, out string) error {
 
 	for _, index := range site.Indices {
 		progress("Generating index page for %s", index.Name)
-		for i := index.First; i <= index.Last; i++ {
-			bPoint := strings.Index(site.Articles[i].Content, "\n\n")
-			if bPoint != -1 {
-				site.Articles[i].Content = site.Articles[i].Content[:bPoint]
-			}
-		}
 
 		t, err := getTemplate(site, "index.tmpl")
 
@@ -93,7 +86,7 @@ func createIndexPages(site *Website, out string) error {
 			return err
 		}
 
-		outFile := getIndexPath(out, site.Articles[index.First].CreatedDate)
+		outFile := getIndexPath(out, site.Articles[index.First].createdDate)
 
 		out, err := os.Create(outFile)
 		defer out.Close()

@@ -46,6 +46,10 @@ func (p parseError) Err() error {
 	return p.err
 }
 
+func mdownToHtml(mdown string) string {
+	return string(blackfriday.MarkdownCommon([]byte(mdown)))
+}
+
 func parsePage(site *Website, path string, out io.Writer) error {
 	return parseMarkdown(site, path, PageType, out)
 }
@@ -106,18 +110,19 @@ func parseMarkdown(site *Website, pagePath string, fileType int, out io.Writer) 
 	var title string
 	var content []byte
 
-	if len(lines) > 2 && lines[1][:4] == "====" {
+	if len(lines) > 2 && lines[1] == strings.Repeat("=", len(lines[0])) {
 		title = lines[0]
 		content = []byte(strings.Join(lines[2:], "\n"))
 	} else {
 		content = pageContents
 	}
 
-	body := string(blackfriday.MarkdownCommon(content))
+	body := string(content)
+	author := getAuthor(pagePath)
 
 	switch fileType {
 	case PageType:
-		dataObj := &Page{site, title, body}
+		dataObj := &Page{title, author, body}
 		site.Pages = append(site.Pages, dataObj)
 		site.CurrentPage = dataObj
 	case ArticleType:
@@ -125,7 +130,7 @@ func parseMarkdown(site *Website, pagePath string, fileType int, out io.Writer) 
 		modified := getModifiedDate(pagePath)
 		permalink := getPermalink(pagePath)
 
-		dataObj := &Article{title, created, modified, body, permalink}
+		dataObj := &Article{title, created, modified, body, permalink, author}
 		site.Articles = append(site.Articles, dataObj)
 		site.CurrentArticle = dataObj
 	}

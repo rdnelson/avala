@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -12,33 +14,70 @@ const (
 )
 
 type Article struct {
-	Title        string
-	CreatedDate  time.Time
-	ModifiedDate time.Time
-	Content      string
-	Permalink    string
+	title        string
+	createdDate  time.Time
+	modifiedDate time.Time
+	content      string
+	permalink    string
+	author       string
 }
 
 type ArticleByDate []*Article
 
 func (a ArticleByDate) Len() int           { return len(a) }
 func (a ArticleByDate) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ArticleByDate) Less(i, j int) bool { return a[i].CreatedDate.Unix() < a[j].CreatedDate.Unix() }
+func (a ArticleByDate) Less(i, j int) bool { return a[i].createdDate.Unix() < a[j].createdDate.Unix() }
+
+func (a Article) IsEdited() bool {
+	edited := true
+
+	edited = edited && a.modifiedDate.Unix() != 0
+	edited = edited && (a.modifiedDate.Day() != a.createdDate.Day() ||
+		a.modifiedDate.Year() != a.createdDate.Year() ||
+		a.modifiedDate.Month() != a.createdDate.Month())
+
+	return edited
+}
 
 func (a Article) RawDate() string {
-	return a.CreatedDate.Format(time.RFC3339)
+	return a.createdDate.Format(time.RFC3339)
 }
 
 func (a Article) FriendlyDate() string {
-	return a.CreatedDate.Format(ArticleDateFormat)
+	return a.createdDate.Format(ArticleDateFormat)
 }
 
 func (a Article) RawEditedDate() string {
-	return a.ModifiedDate.Format(time.RFC3339)
+	return a.modifiedDate.Format(time.RFC3339)
 }
 
 func (a Article) FriendlyEditedDate() string {
-	return a.ModifiedDate.Format(ArticleDateFormat)
+	return a.modifiedDate.Format(ArticleDateFormat)
+}
+
+func (a Article) Summary() string {
+	bPoint := strings.Index(a.content, "\n\n")
+	if bPoint != -1 {
+		return mdownToHtml(fmt.Sprintf("%s\n\n[Full post](%s)", a.content[:bPoint], a.permalink))
+	}
+
+	return mdownToHtml(a.content)
+}
+
+func (a Article) Title() string {
+	return mdownToHtml(a.title)
+}
+
+func (a Article) Author() string {
+	return a.author
+}
+
+func (a Article) Permalink() string {
+	return a.permalink
+}
+
+func (a Article) Content() string {
+	return mdownToHtml(a.content)
 }
 
 func handleArticles(site *Website, out string) error {

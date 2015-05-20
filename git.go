@@ -64,3 +64,17 @@ func getActionTime(file, action string) time.Time {
 
 	return date
 }
+
+func getAuthor(file string) string {
+	cmd := exec.Command("git", "log", "-n1", "--format=%an", file)
+	cmd.Dir = filepath.Dir(file)
+	cmd.Env = getEnvironment()
+
+	out, err := cmd.CombinedOutput()
+
+	if err != nil {
+		return "Unknown Author"
+	}
+
+	return strings.TrimSpace(string(out))
+}

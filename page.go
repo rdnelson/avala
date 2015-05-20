@@ -7,9 +7,21 @@ import (
 )
 
 type Page struct {
-	Site    *Website
-	Title   string
-	Content string
+	title   string
+	author  string
+	content string
+}
+
+func (a Page) Title() string {
+	return mdownToHtml(a.title)
+}
+
+func (a Page) Author() string {
+	return a.author
+}
+
+func (a Page) Content() string {
+	return mdownToHtml(a.content)
 }
 
 func handlePages(site *Website, out string) error {
