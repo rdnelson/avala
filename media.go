@@ -61,7 +61,7 @@ func handleMediaPath(site *Website, dir, out string, count *int, offset *int) er
 		}
 	}
 
-	*offset += *count
+	*offset += len(files)
 
 	return nil
 }
