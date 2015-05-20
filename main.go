@@ -13,6 +13,10 @@ func main() {
 	flag.StringVar(&out, "out", "", "Path to render website into")
 	flag.StringVar(&out, "o", "", "Path to render website into")
 
+	var owner string
+	flag.StringVar(&owner, "owner", "", "User who will own the rendered website")
+	flag.StringVar(&owner, "u", "", "User who will own the rendered website")
+
 	flag.Parse()
 
 	if len(flag.Args()) != 1 {
@@ -33,7 +37,7 @@ func main() {
 
 	// Initialize the post-commit hook
 	if *init {
-		initRepo(flag.Arg(0), out, bare)
+		initRepo(flag.Arg(0), out, owner, bare)
 		return
 	}
 

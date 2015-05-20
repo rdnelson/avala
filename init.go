@@ -1,22 +1,19 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 )
 
-func initRepo(repo, out string, bare bool) error {
+func initRepo(repo, out, owner string, bare bool) error {
 	println("Initializing hook for repo: '" + repo + "'")
 
-	if bare {
-		return initHook(repo, out, true)
-	} else {
-		return initHook(repo, out, false)
-	}
+	return initHook(repo, out, owner, bare)
 }
 
-func initHook(repo, out string, bare bool) error {
+func initHook(repo, out, owner string, bare bool) error {
 
 	var hook string
 
@@ -66,13 +63,13 @@ func initHook(repo, out string, bare bool) error {
 
 	if bare {
 		// Clone a checked out copy
-		_, err = file.WriteString("cd " + os.TempDir() + "\n")
+		_, err = file.WriteString(fmt.Sprintf("cd %s\n", os.TempDir()))
 
 		if err != nil {
 			return err
 		}
 
-		_, err = file.WriteString("git clone " + repo + " " + silencer + "\n")
+		_, err = file.WriteString(fmt.Sprintf("git clone %s %s\n", repo, silencer))
 
 		if err != nil {
 			return err
@@ -81,7 +78,11 @@ func initHook(repo, out string, bare bool) error {
 		repo = filepath.Join(os.TempDir(), filepath.Base(repo))
 	}
 
-	_, err = file.WriteString(bin_path + " -out=\"" + out + "\" " + repo + "\n")
+	if owner == "" {
+		_, err = file.WriteString(fmt.Sprintf("%s -out=\"%s\" %s\n", bin_path, out, repo))
+	} else {
+		_, err = file.WriteString(fmt.Sprintf("%s -out=\"%s\" -owner=\"%s\" %s\n", bin_path, out, owner, repo))
+	}
 
 	if err != nil {
 		return err
@@ -89,9 +90,9 @@ func initHook(repo, out string, bare bool) error {
 
 	if bare {
 		if runtime.GOOS == "windows" {
-			_, err = file.WriteString("rmdir /s /q " + repo + " " + silencer + "\n")
+			_, err = file.WriteString(fmt.Sprintf("rmdir /s /q %s %s\n", repo, silencer))
 		} else {
-			_, err = file.WriteString("rm -rf " + repo + " " + silencer + "\n")
+			_, err = file.WriteString(fmt.Sprintf("rm -rf %s %s", repo, silencer))
 		}
 	}
 
