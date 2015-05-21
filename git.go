@@ -21,7 +21,8 @@ func getEnvironment() []string {
 }
 
 func isBareRepo(repo string) (bool, error) {
-	cmd := exec.Command("git", "-C", repo, "rev-parse", "--is-bare-repository")
+	cmd := exec.Command("git", "rev-parse", "--is-bare-repository")
+	cmd.Dir = filepath.Abs(filepath.Dir(repo))
 	cmd.Env = getEnvironment()
 
 	out, err := cmd.CombinedOutput()
