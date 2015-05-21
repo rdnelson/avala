@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -47,7 +48,7 @@ func getActionTime(file, action string) time.Time {
 		return time.Unix(0, 0)
 	}
 
-	cmd := exec.Command("git", "log", "-n1", "--format=%cI", "--diff-filter="+action, "--", file)
+	cmd := exec.Command("git", "log", "-n1", "--format=%ct", "--diff-filter="+action, "--", file)
 	cmd.Dir = filepath.Dir(file)
 	cmd.Env = getEnvironment()
 
@@ -57,13 +58,14 @@ func getActionTime(file, action string) time.Time {
 		return time.Unix(0, 0)
 	}
 
-	date, err := time.Parse(time.RFC3339, strings.TrimSpace(string(out)))
+	unix, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
 
 	if err != nil {
+		progress("Git reported an invalid date: %s", string(out))
 		return time.Unix(0, 0)
 	}
 
-	return date
+	return time.Unix(unix, 0)
 }
 
 func getAuthor(file string) string {
