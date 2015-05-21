@@ -123,7 +123,9 @@ func handleArticlePath(site *Website, root, dir, out string) error {
 		return err
 	}
 
-	os.MkdirAll(out+dir, 0775)
+	if err = os.MkdirAll(out+dir, 0775); err != nil {
+		return err
+	}
 
 	for _, file := range files {
 		if file.IsDir() {
