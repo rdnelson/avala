@@ -16,7 +16,9 @@ func handleMedia(site *Website, out string) error {
 			continue
 		}
 
+		oldCount := count
 		err := handleMediaPath(site, dir, out, &count, &offset)
+		offset += count - oldCount
 
 		if err != nil {
 			switch {
@@ -41,16 +43,18 @@ func handleMediaPath(site *Website, dir, out string, count *int, offset *int) er
 
 	os.MkdirAll(filepath.Join(out, dir), 0775)
 
-	*count += len(files)
+	for _, file := range files {
+		if !file.IsDir() {
+			*count++
+		}
+	}
 
 	for i, file := range files {
 
 		if file.IsDir() {
 			var oldCount = *count
 			err = handleMediaPath(site, filepath.Join(dir, file.Name()), out, count, offset)
-			*offset += *count - oldCount
-
-			progress("(%d/%d) Copying: %s/", i+1+*offset, *count, filepath.Join(dir, file.Name()))
+			*offset += *count - oldCount - 1
 		} else {
 			progress("(%d/%d) Copying: %s", i+1+*offset, *count, filepath.Join(dir, file.Name()))
 			err = copyFileContents(filepath.Join(site.RepoPath, dir, file.Name()), filepath.Join(out, dir, file.Name()))
@@ -60,8 +64,6 @@ func handleMediaPath(site *Website, dir, out string, count *int, offset *int) er
 			return err
 		}
 	}
-
-	*offset += len(files)
 
 	return nil
 }
