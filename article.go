@@ -123,7 +123,8 @@ func handleArticlePath(site *Website, root, dir, out string) error {
 		return err
 	}
 
-	if err = os.MkdirAll(out+dir, 0775); err != nil {
+	if err = os.MkdirAll(filepath.Join(out, dir), 0775); err != nil {
+		progress("Failed to mkdir: %s", filepath.Join(out, dir))
 		return err
 	}
 
