@@ -41,5 +41,5 @@ func main() {
 		return
 	}
 
-	parseRepo(flag.Arg(0), out, bare)
+	parseRepo(flag.Arg(0), out, owner, bare)
 }

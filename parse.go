@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
+	"strconv"
 )
 
 const (
@@ -47,7 +49,7 @@ func progress(format string, a ...interface{}) {
 	fmt.Printf("  "+format+"\n", a...)
 }
 
-func parseRepo(repo, out string, bare bool) error {
+func parseRepo(repo, out, owner string, bare bool) error {
 
 	os.MkdirAll(out, 0775)
 
@@ -109,6 +111,25 @@ func parseRepo(repo, out string, bare bool) error {
 		progress("No media directories")
 	} else {
 		err = handleMedia(site, out)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	if owner != "" {
+		usr, err := user.Lookup(owner)
+
+		if err != nil {
+			fmt.Printf("Failed to set owner to '%s'\n", owner)
+			return err
+		}
+
+		err = filepath.Walk(out, filepath.WalkFunc(func(path string, info os.FileInfo, err error) error {
+			uid, _ := strconv.ParseInt(usr.Uid, 10, 32)
+			gid, _ := strconv.ParseInt(usr.Gid, 10, 32)
+			return os.Chown(path, int(uid), int(gid))
+		}))
 
 		if err != nil {
 			return err
