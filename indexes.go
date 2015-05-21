@@ -46,6 +46,11 @@ func SameMonth(t, v time.Time) bool {
 
 func createIndices(site *Website, out string) (err error) {
 
+	// If there are no articles, there are no indexes
+	if len(site.Articles) == 0 {
+		return nil
+	}
+
 	var name string
 	finalUpdateRequired := false
 
