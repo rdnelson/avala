@@ -29,6 +29,7 @@ func isBareRepo(repo string) (bool, error) {
 	out, err := cmd.CombinedOutput()
 
 	if err != nil {
+		println(string(out))
 		return false, err
 	}
 

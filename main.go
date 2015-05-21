@@ -33,6 +33,7 @@ func main() {
 
 	if err != nil {
 		fmt.Printf("Error: %s\n", err.Error())
+		os.Exit(3)
 	}
 
 	// Initialize the post-commit hook
