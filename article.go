@@ -64,6 +64,10 @@ func (a Article) Summary() string {
 	return mdownToHtml(a.content)
 }
 
+func (a Article) RawTitle() string {
+	return a.title
+}
+
 func (a Article) Title() string {
 	return mdownToHtml(a.title)
 }
