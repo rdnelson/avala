@@ -137,6 +137,9 @@ func parseMarkdown(site *Website, pagePath string, fileType int, out io.Writer) 
 
 	err = t.Execute(out, site)
 
+	site.CurrentPage = nil
+	site.CurrentArticle = nil
+
 	if err != nil {
 		println(err.Error())
 		return parseError{err, false}
