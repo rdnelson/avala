@@ -56,7 +56,7 @@ func (a Article) FriendlyEditedDate() string {
 }
 
 func (a Article) Summary() string {
-	bPoint := strings.Index(a.content, "\n\n")
+	bPoint := strings.Index(a.content, "\n\n\n")
 	if bPoint != -1 {
 		return mdownToHtml(fmt.Sprintf("%s\n\n[Full post](%s)", a.content[:bPoint], a.permalink))
 	}
