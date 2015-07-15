@@ -49,7 +49,13 @@ func getActionTime(file, action string) time.Time {
 		return time.Unix(0, 0)
 	}
 
-	cmd := exec.Command("git", "log", "-n1", "--format=%ct", "--diff-filter="+action, "--", file)
+	cmd := exec.Command("git", "log",
+		"-n1",                   // One result
+		"--format=%ct",          // Unix timestamp
+		"--diff-filter="+action, // Filter by action
+		"-i", "-E", "--grep='\\[(typo|draft)\\]", // Search for non-typo commit
+		"--", file)
+
 	cmd.Dir = filepath.Dir(file)
 	cmd.Env = getEnvironment()
 
