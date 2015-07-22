@@ -1,0 +1,34 @@
+{
+    "Title" : "Website title",
+    "Subtitle" : "Subtitle",
+    "Headings" : [{
+        "Title" : "Home",
+        "Url" : "/"
+    },
+    {
+        "Title" : "Projects",
+        "Url" : "/projects"
+    },
+    {
+        "Title" : "PDF Document",
+        "Url" : "/media/Document.pdf"
+    }],
+    "MediaPaths" : [
+        "media/*"
+    ],
+    "StylesheetPaths" : [
+        "styles/*"
+    ],
+    "ScriptPaths" : [
+        "scripts/*"
+    ],
+    "TemplatePaths" : [
+        "templates/*"
+    ],
+    "PagePaths" : [
+        "pages/*"
+    ],
+    "ArticlePaths" : [
+        "articles/*"
+    ]
+}

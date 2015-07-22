@@ -11,7 +11,7 @@ func handleMedia(site *Website, out string) error {
 	var count int
 	offset := 0
 
-	for _, dir := range site.Media {
+	for _, dir := range site.Config.MediaPaths {
 		if _, err := os.Stat(filepath.Join(site.RepoPath, dir)); err != nil {
 			continue
 		}
