@@ -42,5 +42,9 @@ func main() {
 		return
 	}
 
-	parseRepo(flag.Arg(0), out, owner, bare)
+	err = parseRepo(flag.Arg(0), out, owner)
+
+	if err != nil {
+		os.Exit(4)
+	}
 }
