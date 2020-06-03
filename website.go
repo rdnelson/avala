@@ -20,11 +20,17 @@ type IndexRange struct {
 	Name        string
 }
 
+type WebsiteSettings struct {
+	Minify bool
+}
+
 type WebsiteConfig struct {
 	Title    string
 	Subtitle string
 
 	Headings []Heading
+
+	Settings WebsiteSettings
 
 	ArticlePaths []string
 	PagePaths    []string

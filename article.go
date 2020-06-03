@@ -133,6 +133,5 @@ func generateArticle(site *Website, t *template.Template, outputPath string) err
 		return err
 	}
 
-	return t.Execute(out, site)
-
+	return runTemplate(t, site, out)
 }

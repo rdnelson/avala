@@ -112,6 +112,7 @@ func parseRepo(repoPath, outPath, owner string) (err error) {
 		for _, file := range items {
 			progress("Copying %s", file.(*StaticFile).Path)
 			handleStaticPath(
+				site,
 				filepath.Join(site.RepoPath, file.(*StaticFile).Path),
 				filepath.Join(outPath, file.(*StaticFile).Path))
 		}

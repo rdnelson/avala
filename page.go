@@ -81,5 +81,5 @@ func generatePage(site *Website, t *template.Template, outputPath string) error 
 		return err
 	}
 
-	return t.Execute(out, site)
+	return runTemplate(t, site, out)
 }

@@ -12,14 +12,17 @@ import (
 	"time"
 )
 
-func copyFileContents(src, dst string) (err error) {
+func copyFileContents(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
-		return
+		return err
 	}
 
 	defer in.Close()
+	return copyContents(in, dst)
+}
 
+func copyContents(in io.Reader, dst string) (err error) {
 	out, err := os.Create(dst)
 
 	if err != nil {
