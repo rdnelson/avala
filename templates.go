@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"text/template"
 
+	"github.com/Masterminds/sprig"
+
 	"github.com/tdewolff/minify/v2"
 	"github.com/tdewolff/minify/v2/css"
 	"github.com/tdewolff/minify/v2/html"
@@ -106,7 +108,9 @@ func loadTemplates(paths []string) (t *template.Template, err error) {
 		return nil, errors.New("At least one template must be specified")
 	}
 
-	t, err = template.ParseFiles(paths[0])
+	t = template.New(filepath.Base(paths[0])).Funcs(sprig.TxtFuncMap())
+
+	t, err = t.ParseFiles(paths[0])
 
 	if err != nil {
 		return

@@ -43,7 +43,7 @@ func handleStaticPath(site *Website, file, outPath string) error {
 	err = minifier.Minify(mime.TypeByExtension(filepath.Ext(file)), buf, in)
 
 	if err != nil {
-		return err
+		return copyFileContents(file, outPath)
 	}
 
 	return copyContents(buf, outPath)
