@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -15,11 +17,11 @@ const (
 
 type Article struct {
 	title        string
-	createdDate  time.Time
-	modifiedDate time.Time
+	author       string
 	content      string
 	permalink    string
-	author       string
+	createdDate  time.Time
+	modifiedDate time.Time
 }
 
 type ArticleByDate []*Article
@@ -84,98 +86,53 @@ func (a Article) Content() string {
 	return mdownToHtml(a.content)
 }
 
-func handleArticles(site *Website, out string) error {
+func handleArticle(c chan HandleResult, site *Website, articlePath string) {
 
-	dirs := []string{"articles"}
+	articleBytes, err := ioutil.ReadFile(articlePath)
+	articleMarkdown := string(articleBytes)
 
-	for _, dir := range dirs {
-		err := handleArticlePath(site, dir, "", out)
+	title := getTitle(articleMarkdown)
+	author := getAuthor(articlePath)
+	content := getContents(articleMarkdown)
+	created, err := getCreatedDate(articlePath)
 
-		if err != nil {
-
-			switch {
-			case os.IsNotExist(err):
-				progress("%s", err.Error())
-				progress("The file was likely deleted during processing")
-			case os.IsPermission(err):
-				progress("%s", err.Error())
-				progress("Please check the file permissions on the repo")
-			default:
-				switch err.(type) {
-				case TemplateError:
-					progress("Required template missing: %s", err.Error())
-					return err
-				case ParseError:
-					if err.(ParseError).IsFatal() {
-						return err.(ParseError).Err()
-					} else {
-						progress(err.Error())
-						return nil
-					}
-				}
-			}
-		}
+	if err != nil {
+		c <- HandleResult{errors.New("No creation date found"), articlePath, nil}
+		return
 	}
 
-	return nil
+	edited, _ := getModifiedDate(articlePath)
+	permalink := getPermalink(articlePath)
+
+	if err != nil {
+		c <- HandleResult{err, articlePath, nil}
+		return
+	}
+
+	article := &Article{
+		title,
+		author,
+		content,
+		permalink,
+		created,
+		edited,
+	}
+
+	c <- HandleResult{nil, articlePath, article}
 }
 
-func handleArticlePath(site *Website, root, dir, out string) error {
-	files, err := ioutil.ReadDir(filepath.Join(site.RepoPath, root, dir))
+func generateArticle(site *Website, t *template.Template, outputPath string) error {
+	genPath := filepath.Join(outputPath, changeExtention(site.CurrentArticle.permalink, "html"))
+
+	os.MkdirAll(filepath.Dir(genPath), 0775)
+
+	out, err := os.Create(genPath)
+	defer out.Close()
 
 	if err != nil {
 		return err
 	}
 
-	if err = os.MkdirAll(filepath.Join(out, dir), 0775); err != nil {
-		progress("Failed to mkdir: %s", filepath.Join(out, dir))
-		return err
-	}
+	return t.Execute(out, site)
 
-	for _, file := range files {
-		if file.IsDir() {
-			err = handleArticlePath(site, root, filepath.Join(dir, file.Name()), out)
-		} else if file.Name()[len(file.Name())-3:] == ".md" {
-
-			filePath := filepath.Join(site.RepoPath, root, dir, file.Name())
-
-			if getCreatedDate(filePath).Unix() == 0 {
-				continue
-			}
-
-			outPath := filepath.Join(out, filepath.FromSlash(getPermalink(filePath)+".html"))
-
-			if dir == "" {
-				progress("Parsing article: %s -> %s", file.Name(), outPath)
-			} else {
-				progress("Parsing article: %s -> %s", filepath.Join(dir, file.Name()), outPath)
-			}
-
-			os.MkdirAll(filepath.Dir(outPath), 0775)
-
-			out, err := os.Create(outPath)
-			defer out.Close()
-
-			if err != nil {
-				return nil
-			}
-
-			err = parseArticle(site, filePath, out)
-
-			if err != nil {
-				if err.(ParseError).IsFatal() {
-					return err.(ParseError).Err()
-				} else {
-					progress(err.Error())
-					continue
-				}
-			}
-		}
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

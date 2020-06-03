@@ -1,10 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 func createHomepage(site *Website, out string) error {
@@ -14,7 +12,7 @@ func createHomepage(site *Website, out string) error {
 		last = len(site.Articles) - 1
 	}
 
-	t, err := getTemplate(site, "home.tmpl")
+	t, err := getHomeTemplate(site)
 
 	if err != nil {
 		return err
@@ -40,7 +38,7 @@ func createHomepage(site *Website, out string) error {
 	return err
 }
 
-func SameMonth(t, v time.Time) bool {
+/*func SameMonth(t, v time.Time) bool {
 	return (t.Month() == v.Month()) && (t.Year() == t.Year())
 }
 
@@ -110,4 +108,4 @@ func createIndexPages(site *Website, out string) error {
 	}
 
 	return nil
-}
+}*/

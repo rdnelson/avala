@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,24 +37,24 @@ func isBareRepo(repo string) (bool, error) {
 	return string(out) == "true\n", nil
 }
 
-func getCreatedDate(file string) time.Time {
+func getCreatedDate(file string) (time.Time, error) {
 	return getActionTime(file, "A")
 }
 
-func getModifiedDate(file string) time.Time {
+func getModifiedDate(file string) (time.Time, error) {
 	return getActionTime(file, "M")
 }
 
-func getActionTime(file, action string) time.Time {
+func getActionTime(file, action string) (time.Time, error) {
 	if len(action) != 1 {
-		return time.Unix(0, 0)
+		return time.Unix(0, 0), errors.New("Invalid git diff action")
 	}
 
 	cmd := exec.Command("git", "log",
 		"-n1",                   // One result
 		"--format=%ct",          // Unix timestamp
 		"--diff-filter="+action, // Filter by action
-		"-i", "-E", "--grep='\\[(typo|draft)\\]", // Search for non-typo commit
+		"-i", "-E", "--invert-grep", "--grep='\\[(typo|draft)\\]'", // Search for non-typo commit
 		"--", file)
 
 	cmd.Dir = filepath.Dir(file)
@@ -62,17 +63,16 @@ func getActionTime(file, action string) time.Time {
 	out, err := cmd.CombinedOutput()
 
 	if err != nil {
-		return time.Unix(0, 0)
+		return time.Unix(0, 0), err
 	}
 
 	unix, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
 
 	if err != nil {
-		progress("Git reported an invalid date: %s", string(out))
-		return time.Unix(0, 0)
+		return time.Unix(0, 0), err
 	}
 
-	return time.Unix(unix, 0)
+	return time.Unix(unix, 0), nil
 }
 
 func getAuthor(file string) string {

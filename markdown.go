@@ -1,64 +1,78 @@
 package main
 
 import (
-	"errors"
 	"github.com/russross/blackfriday"
-	"io"
-	"io/ioutil"
-	"path/filepath"
+	"regexp"
 	"strings"
-	"text/template"
 )
 
-const (
-	PageType        = iota
-	ArticleType     = iota
-	TemplateDir     = "templates"
-	DefaultTemplate = "main.tmpl"
-)
-
-type TemplateError interface {
-	error
-}
-
-type templateError error
-
-type ParseError interface {
-	error
-	IsFatal() bool
-	Err() error
-}
-
-type parseError struct {
-	err   error
-	fatal bool
-}
-
-func (p parseError) Error() string {
-	return p.err.Error()
-}
-
-func (p parseError) IsFatal() bool {
-	return p.fatal
-}
-
-func (p parseError) Err() error {
-	return p.err
-}
+var paramRegex = regexp.MustCompile("\\[([^:]*):\\s*(.*)\\]")
 
 func mdownToHtml(mdown string) string {
 	return string(blackfriday.MarkdownCommon([]byte(mdown)))
 }
 
-func parsePage(site *Website, path string, out io.Writer) error {
-	return parseMarkdown(site, path, PageType, out)
+func getTitle(contents string) string {
+	lines := strings.Split(contents, "\n")
+
+	// Look for header information
+	for _, line := range lines {
+		if match := paramRegex.FindStringSubmatch(line); len(match) > 0 {
+			if strings.ToLower(match[1]) == "title" {
+				return match[2]
+			}
+		} else {
+			break
+		}
+	}
+
+	if len(lines) > 2 && lines[1] == strings.Repeat("=", len(lines[0])) {
+		return lines[0]
+	}
+
+	return ""
 }
 
-func parseArticle(site *Website, path string, out io.Writer) error {
-	return parseMarkdown(site, path, ArticleType, out)
+func getContents(mdown string) string {
+	lines := strings.Split(mdown, "\n")
+
+	var content string
+
+	// If [param: value] style metadata is present
+	if len(lines) > 0 && paramRegex.MatchString(lines[0]) {
+		for i, line := range lines[1:] {
+			if !paramRegex.MatchString(line) {
+				return strings.Join(lines[i+1:], "\n")
+			}
+		}
+	}
+
+	if len(lines) > 2 && lines[1] == strings.Repeat("=", len(lines[0])) {
+		content = strings.Join(lines[2:], "\n")
+	} else {
+		content = mdown
+	}
+
+	return content
 }
 
-func getTemplate(site *Website, names ...string) (t *template.Template, err error) {
+func getOutputPath(mdown string) string {
+	lines := strings.Split(mdown, "\n")
+
+	for _, line := range lines {
+		if match := paramRegex.FindStringSubmatch(line); len(match) > 0 {
+			if strings.ToLower(match[1]) == "path" {
+				return strings.Replace(match[2], "..", "", -1)
+			}
+		} else {
+			break
+		}
+	}
+
+	return ""
+}
+
+/*func getTemplate(site *Website, names ...string) (t *template.Template, err error) {
 
 	if len(names) == 0 {
 		return nil, errors.New("At least one template must be specified")
@@ -146,4 +160,4 @@ func parseMarkdown(site *Website, pagePath string, fileType int, out io.Writer) 
 	}
 
 	return nil
-}
+}*/

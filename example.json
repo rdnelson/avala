@@ -13,13 +13,9 @@
         "Title" : "PDF Document",
         "Url" : "/media/Document.pdf"
     }],
-    "MediaPaths" : [
-        "media/*"
-    ],
-    "StylesheetPaths" : [
-        "styles/*"
-    ],
-    "ScriptPaths" : [
+    "StaticPaths" : [
+        "media/*",
+        "styles/*",
         "scripts/*"
     ],
     "TemplatePaths" : [
@@ -30,5 +26,10 @@
     ],
     "ArticlePaths" : [
         "articles/*"
-    ]
+    ],
+
+    "GlobalTemplates" : ["main.tmpl"],
+    "ArticleTemplates" : ["article.tmpl"],
+    "PageTemplates" : ["page.tmpl"],
+    "HomeTemplates" : ["home.tmpl"]
 }

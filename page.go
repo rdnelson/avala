@@ -4,12 +4,16 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
+	"text/template"
 )
 
 type Page struct {
 	title   string
 	author  string
 	content string
+
+	outputPath string
 }
 
 func (a Page) Title() string {
@@ -24,86 +28,58 @@ func (a Page) Content() string {
 	return mdownToHtml(a.content)
 }
 
-func handlePages(site *Website, out string) error {
+func handlePage(c chan HandleResult, site *Website, pagePath string) {
 
-	dirs := []string{"pages"}
+	pageBytes, err := ioutil.ReadFile(pagePath)
+	pageMarkdown := string(pageBytes)
 
-	for _, dir := range dirs {
-		err := handlePagePath(site, dir, "", out)
+	title := getTitle(pageMarkdown)
+	content := getContents(pageMarkdown)
+	author := getAuthor(pagePath)
+	outpath := getPageOutputPath(pagePath, pageMarkdown)
 
-		if err != nil {
-
-			switch {
-			case os.IsNotExist(err):
-				progress("%s", err.Error())
-				progress("The file was likely deleted during processing")
-			case os.IsPermission(err):
-				progress("%s", err.Error())
-				progress("Please check the file permissions on the repo")
-			default:
-				switch err.(type) {
-				case TemplateError:
-					progress("Required template missing: %s", err.Error())
-					return err
-				case ParseError:
-					if err.(ParseError).IsFatal() {
-						return err.(ParseError).Err()
-					} else {
-						progress(err.Error())
-						return nil
-					}
-				}
-			}
-		}
+	if err != nil {
+		c <- HandleResult{err, pagePath, nil}
+		return
 	}
 
-	return nil
+	page := &Page{
+		title,
+		author,
+		content,
+		outpath,
+	}
+
+	c <- HandleResult{nil, pagePath, page}
 }
 
-func handlePagePath(site *Website, root, dir, out string) error {
-	files, err := ioutil.ReadDir(filepath.Join(site.RepoPath, root, dir))
+func getPageOutputPath(pagePath, contents string) string {
+
+	if path := getOutputPath(contents); path != "" {
+		return path
+	}
+
+	idx := strings.LastIndex(pagePath, string(os.PathSeparator))
+
+	if idx == -1 {
+		return changeExtention(pagePath, "html")
+	} else {
+		return changeExtention(pagePath[idx:], "html")
+	}
+}
+
+func generatePage(site *Website, t *template.Template, outputPath string) error {
+
+	genPath := filepath.Join(outputPath, site.CurrentPage.outputPath)
+
+	os.MkdirAll(filepath.Dir(genPath), 0775)
+
+	out, err := os.Create(genPath)
+	defer out.Close()
 
 	if err != nil {
 		return err
 	}
 
-	os.MkdirAll(out+dir, 0775)
-
-	for _, file := range files {
-		if file.IsDir() {
-			err = handlePagePath(site, root, filepath.Join(dir, file.Name()), out)
-		} else if file.Name()[len(file.Name())-3:] == ".md" {
-			if dir == "" {
-				progress("Parsing page: %s", file.Name())
-			} else {
-				progress("Parsing page: %s", filepath.Join(dir, file.Name()))
-			}
-
-			out, err := os.Create(filepath.Join(out, dir, file.Name()[:len(file.Name())-3]+".html"))
-			defer out.Close()
-
-			if err != nil {
-				return nil
-			}
-
-			err = parsePage(site, filepath.Join(site.RepoPath, "pages", dir, file.Name()), out)
-
-			switch err.(type) {
-			case ParseError:
-				if err != nil && err.(ParseError).IsFatal() {
-					return err.(ParseError).Err()
-				} else {
-					continue
-				}
-			case TemplateError:
-				return err
-			}
-		}
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return t.Execute(out, site)
 }

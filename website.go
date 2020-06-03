@@ -24,18 +24,22 @@ type WebsiteConfig struct {
 	Title    string
 	Subtitle string
 
-	ArticlePaths    []string
-	MediaPaths      []string
-	PagePaths       []string
-	ScriptPaths     []string
-	StylesheetPaths []string
-	TemplatePaths   []string
+	Headings []Heading
+
+	ArticlePaths []string
+	PagePaths    []string
+	StaticPaths  []string
+
+	GlobalTemplates  []string
+	ArticleTemplates []string
+	PageTemplates    []string
+	HomeTemplates    []string
+	IndexTemplates   []string
 }
 
 type Website struct {
 	Config WebsiteConfig
 	// Internal values
-	Headings       []Heading
 	Articles       []*Article
 	Pages          []*Page
 	CurrentPage    *Page
@@ -51,6 +55,18 @@ func (a *Website) ActiveArticles() []*Article {
 	}
 
 	return a.Articles[a.CurrentIndex.First : a.CurrentIndex.Last+1]
+}
+
+func (a *Website) Title() string {
+	return a.Config.Title
+}
+
+func (a *Website) Subtitle() string {
+	return a.Config.Subtitle
+}
+
+func (a *Website) Headings() []Heading {
+	return a.Config.Headings
 }
 
 func loadSiteConfig(repo string) (*Website, error) {

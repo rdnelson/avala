@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
-	"sort"
-	"strconv"
+	"strings"
 )
 
 func fail(format string, a ...interface{}) {
@@ -21,8 +19,21 @@ func progress(format string, a ...interface{}) {
 	fmt.Printf("  "+format+"\n", a...)
 }
 
+type HandleResult struct {
+	err  error
+	path string
+	item interface{}
+}
+
+type HandleFunc func(c chan HandleResult, site *Website, filePath string)
+
 func parseRepo(repoPath, outPath, owner string) (err error) {
-	os.MkdirAll(outPath, 0775)
+	err = os.MkdirAll(outPath, 0775)
+
+	if err != nil {
+		fail("%s", err)
+		return
+	}
 
 	fmt.Printf("Loading 'website.json'\n")
 	site, err := loadSiteConfig(repoPath)
@@ -34,127 +45,129 @@ func parseRepo(repoPath, outPath, owner string) (err error) {
 
 	fmt.Printf("Processing website: %s\n", site.Config.Title)
 
-	for i, head := range site.Headings {
-		progress("(%d/%d) Heading: %s -> %s", i+1, len(site.Headings), head.Title, head.Url)
+	for i, head := range site.Config.Headings {
+		progress("(%d/%d) Heading: %s -> %s", i+1, len(site.Config.Headings), head.Title, head.Url)
 	}
 
 	fmt.Println("Processing Pages")
-	for _, path := range site.Config.PagePaths {
-		path = filepath.Join(repoPath, path)
-		files, err := getAllFiles(path)
-		if err != nil {
-			fail("Failed to process page path '%s': %s", path, err)
-			continue
-		}
+	items, err := handlePaths(site.Config.PagePaths, site, handlePage)
 
-		for _, file := range files {
-			progress("Found page '%s'", file)
+	if err != nil {
+		warning("No pages were successfully processed")
+	} else {
+		for _, item := range items {
+			site.Pages = append(site.Pages, item.(*Page))
+		}
+	}
+
+	fmt.Println("Generating HTML Pages")
+	pageTemplate, err := getPageTemplate(site)
+
+	if err != nil {
+		fail("Error loading page templates: %s", err)
+	} else {
+		for _, page := range site.Pages {
+			progress("Generating %s", page.outputPath)
+			site.CurrentPage = page
+			err = generatePage(site, pageTemplate, outPath)
+
+			if err != nil {
+				warning("Failed to generate %s: %s", page.outputPath, err)
+			}
 		}
 	}
 
 	fmt.Println("Processing Articles")
-	for _, path := range site.Config.ArticlePaths {
-		path = filepath.Join(repoPath, path)
-		files, err := getAllFiles(path)
-		if err != nil {
-			fail("Failed to process article path '%s': %s", path, err)
-			continue
-		}
-
-		for _, file := range files {
-			progress("Found article '%s'", file)
+	items, err = handlePaths(site.Config.ArticlePaths, site, handleArticle)
+	if err != nil {
+		warning("No articles were successfully processed")
+	} else {
+		for _, item := range items {
+			site.Articles = append(site.Articles, item.(*Article))
 		}
 	}
+
+	fmt.Println("Generating HTML Articles")
+	articleTemplate, err := getArticleTemplate(site)
+
+	if err != nil {
+		fail("Error loading page templates: %s", err)
+	} else {
+		for _, article := range site.Articles {
+			progress("Generating %s", article.permalink)
+			site.CurrentArticle = article
+			err = generateArticle(site, articleTemplate, outPath)
+
+			if err != nil {
+				warning("Failed to generate %s: %s", article.permalink, err)
+			}
+		}
+	}
+
+	fmt.Println("Copying Static Files")
+	items, err = handlePaths(site.Config.StaticPaths, site, handleStatic)
+	if err != nil {
+		warning("No static files were successfully processed")
+	} else {
+		for _, file := range items {
+			progress("Copying %s", file.(*StaticFile).Path)
+			handleStaticPath(
+				filepath.Join(site.RepoPath, file.(*StaticFile).Path),
+				filepath.Join(outPath, file.(*StaticFile).Path))
+		}
+	}
+
+	createHomepage(site, outPath)
 
 	return
 }
 
-func parseRepoOld(repo, out, owner string) error {
+func handlePaths(paths []string, site *Website, handler HandleFunc) (list []interface{}, err error) {
+	anySuccess := false
+	fileCount := 0
 
-	os.MkdirAll(out, 0775)
+	list = []interface{}{}
 
-	site, err := loadSiteConfig(repo)
+	c := make(chan HandleResult)
+	for _, path := range paths {
+		path = filepath.Join(site.RepoPath, path)
+		progress("Searching path %s", path)
 
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-
-	if site == nil {
-		println("No website.json found, cannot generate website.")
-		return nil
-	}
-
-	fmt.Printf("Processing website: %s\n", site.Config.Title)
-
-	for i, head := range site.Headings {
-		progress("(%d/%d) Heading: %s -> %s", i+1, len(site.Headings), head.Title, head.Url)
-	}
-
-	fmt.Println("Processing pages")
-	err = handlePages(site, out)
-
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("Processing articles")
-	err = handleArticles(site, out)
-
-	if err != nil {
-		return err
-	}
-
-	// Sort the articles to newest first
-	sort.Sort(sort.Reverse(ArticleByDate(site.Articles)))
-
-	println("Creating homepage")
-	err = createHomepage(site, out)
-
-	if err != nil {
-		progress(err.Error())
-		return err
-	}
-	progress("Successfully generated homepage")
-
-	println("Creating archive index pages")
-	err = createIndices(site, out)
-
-	if err != nil {
-		progress(err.Error())
-		return err
-	}
-
-	println("Copying media files into place")
-
-	if len(site.Config.MediaPaths) == 0 {
-		progress("No media directories")
-	} else {
-		err = handleMedia(site, out)
-
+		files, err := getAllFiles(path)
 		if err != nil {
-			return err
+			fail("Failed to process path '%s': %s", path, err)
+			continue
+		}
+
+		anySuccess = true
+
+		for _, file := range files {
+			fileCount++
+			go handler(c, site, file)
 		}
 	}
 
-	if owner != "" {
-		usr, err := user.Lookup(owner)
+	progress("Found %d items", fileCount)
+	for i := 1; i <= fileCount; i++ {
+		res := <-c
 
-		if err != nil {
-			fmt.Printf("Failed to set owner to '%s'\n", owner)
-			return err
-		}
+		progress("(%d/%d) Processing '%s'", i, fileCount, strings.Replace(res.path, site.RepoPath, "", 1))
 
-		err = filepath.Walk(out, filepath.WalkFunc(func(path string, info os.FileInfo, err error) error {
-			uid, _ := strconv.ParseInt(usr.Uid, 10, 32)
-			gid, _ := strconv.ParseInt(usr.Gid, 10, 32)
-			return os.Chown(path, int(uid), int(gid))
-		}))
+		if res.err != nil {
+			progress("  [WARNING] Error during processing: %s", res.err)
+		} else {
 
-		if err != nil {
-			return err
+			if res.item != nil {
+				list = append(list, res.item)
+			} else {
+				progress("  [ERROR] Received nil item")
+			}
 		}
 	}
 
-	return nil
+	if anySuccess {
+		err = nil
+	}
+
+	return
 }

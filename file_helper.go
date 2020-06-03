@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -43,7 +45,11 @@ func copyFileContents(src, dst string) (err error) {
 }
 
 func getPermalink(path string) string {
-	created := getCreatedDate(path)
+	created, err := getCreatedDate(path)
+
+	if err != nil {
+		return ""
+	}
 
 	file := filepath.Base(path)
 	file = file[:len(file)-len(filepath.Ext(file))]
@@ -66,9 +72,9 @@ func getAllFiles(dir string) (files []string, err error) {
 	}
 
 	dir = strings.Replace(dir, ".", "\\.", -1)
-	dir = strings.Replace(dir, "**", "<<wilddir>>", -1)
+	dir = strings.Replace(dir, "**/", "<<wilddir>>", -1)
 	dir = strings.Replace(dir, "*", "[^"+string(os.PathSeparator)+"]*", -1)
-	dir = strings.Replace(dir, "<<wilddir>>", ".*", -1)
+	dir = strings.Replace(dir, "<<wilddir>>", ".*/?", -1)
 	dir = "^" + dir + "$"
 
 	pattern, err := regexp.Compile(dir)
@@ -94,4 +100,42 @@ func getAllFiles(dir string) (files []string, err error) {
 	})
 
 	return
+}
+
+func chown(owner, dir string) error {
+	if owner != "" {
+		usr, err := user.Lookup(owner)
+
+		if err != nil {
+			fmt.Printf("Failed to set owner to '%s'\n", owner)
+			return err
+		}
+
+		err = filepath.Walk(dir, filepath.WalkFunc(func(path string, info os.FileInfo, err error) error {
+			uid, _ := strconv.ParseInt(usr.Uid, 10, 32)
+			gid, _ := strconv.ParseInt(usr.Gid, 10, 32)
+			return os.Chown(path, int(uid), int(gid))
+		}))
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func changeExtention(filename, ext string) string {
+	if strings.TrimSpace(filename) == "" {
+		return ""
+	}
+
+	dotIdx := strings.LastIndex(filename, ".")
+	sepIdx := strings.LastIndex(filename, string(os.PathSeparator))
+
+	if dotIdx != -1 && dotIdx > sepIdx {
+		return filename[:dotIdx+1] + ext
+	} else {
+		return filename + "." + ext
+	}
 }
